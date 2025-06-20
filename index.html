@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indian Startup Funding Dashboard - Last 90 Days (100 Companies)</title>
+    <link rel="stylesheet" href="enhanced_mobile_theme.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Additional styles specific to the page if needed */
+        .news-link a {
+            color: var(--stellar-cyan);
+            text-decoration: none;
+        }
+        .news-link a:hover {
+            text-decoration: underline;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: var(--night-space);
+            color: var(--text-primary);
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%; 
+            left: 50%;
+            margin-left: -100px; /* Use half of the width (200/2 = 100) to center the tooltip */
+            opacity: 0;
+            transition: opacity 0.3s;
+            border: 1px solid var(--violet-core);
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Indian Startup <span>Funding Dashboard</span></h1>
+        <p class="subtitle">Tracking the Latest 100 Companies Funded (Last 90 Days) - Updated: June 20, 2025</p>
+    </header>
+
+    <div class="container">
+        <div class="dashboard-grid">
+            <div class="card">
+                <h2>Key Stats</h2>
+                <div class="stat-grid">
+                    <div class="stat-box">
+                        <div class="number" id="totalCompanies">0</div>
+                        <div class="label">Total Companies</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number" id="totalFunding">$0M</div>
+                        <div class="label">Total Funding Raised</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number" id="avgFunding">$0M</div>
+                        <div class="label">Average Funding</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number" id="uniqueIndustries">0</div>
+                        <div class="label">Unique Industries</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Funding by Industry</h2>
+                <div class="chart-container">
+                    <canvas id="industryChart"></canvas>
+                </div>
+                <div class="chart-info">
+                    Click on chart segments to filter by industry
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Funding by Round</h2>
+                <div class="chart-container">
+                    <canvas id="roundChart"></canvas>
+                </div>
+                <div class="chart-info">
+                    Click on bars to filter by funding round
+                </div>
+            </div>
+        </div>
+
+        <div class="filters card" style="margin-top: 20px;">
+            <h2>Filter & Search Companies</h2>
+            <div class="filter-group">
+                <input type="text" id="searchInput" class="search-box" placeholder="Search by name, industry, founder, VC...">
+            </div>
+            <div class="filter-group">
+                <div>
+                    <label for="industryFilter">Industry:</label>
+                    <select id="industryFilter"><option value="">All Industries</option></select>
+                </div>
+                <div>
+                    <label for="roundFilter">Funding Round:</label>
+                    <select id="roundFilter"><option value="">All Rounds</option></select>
+                </div>
+                <div>
+                    <label for="monthFilter">Funding Month:</label>
+                    <select id="monthFilter"><option value="">All Months</option></select>
+                </div>
+            </div>
+            <div class="active-filters-container" id="activeFilters">
+                <!-- Active filters will be displayed here -->
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Funded Companies Details (Top 100 - Last 90 Days)</h2>
+            <div class="table-container">
+                <table id="companiesTable">
+                    <thead>
+                        <tr>
+                            <th data-sort="name">Company Name</th>
+                            <th data-sort="amount">Amount Raised</th>
+                            <th data-sort="industry">Industry</th>
+                            <th data-sort="round">Round</th>
+                            <th data-sort="date">Funding Date</th>
+                            <th>Founder(s)</th>
+                            <th>VC Fund(s)</th>
+                            <th>News Source</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Table rows will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="paginationControls">
+                <!-- Pagination buttons will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 Indian Startup Funding Dashboard. Created by Manus.</p>
+        <p class="last-updated">Last updated: June 20, 2025</p>
+    </footer>
+
+    <script src="funding_data.js"></script>
+    <script>
+        let currentSortColumn = 'amount';
+        let currentSortDirection = 'desc';
+        let currentPage = 1;
+        const rowsPerPage = 15;
+
+        // Filter state
+        let activeFilters = {
+            industry: '',
+            round: '',
+            month: '',
+            search: ''
+        };
+
+        let industryChartInstance, roundChartInstance;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            populateFilters();
+            renderDashboard();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                activeFilters.search = e.target.value.toLowerCase();
+                currentPage = 1;
+                renderDashboard();
+                updateActiveFiltersDisplay();
+            });
+            
+            document.getElementById('industryFilter').addEventListener('change', (e) => {
+                activeFilters.industry = e.target.value;
+                currentPage = 1;
+                renderDashboard();
+                updateActiveFiltersDisplay();
+            });
+            
+            document.getElementById('roundFilter').addEventListener('change', (e) => {
+                activeFilters.round = e.target.value;
+                currentPage = 1;
+                renderDashboard();
+                updateActiveFiltersDisplay();
+            });
+            
+            document.getElementById('monthFilter').addEventListener('change', (e) => {
+                activeFilters.month = e.target.value;
+                currentPage = 1;
+                renderDashboard();
+                updateActiveFiltersDisplay();
+            });
+            
+            document.querySelectorAll('#companiesTable thead th').forEach(th => {
+                th.addEventListener('click', () => {
+                    const sortKey = th.dataset.sort;
+                    if (sortKey) {
+                        if (currentSortColumn === sortKey) {
+                            currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                        } else {
+                            currentSortColumn = sortKey;
+                            currentSortDirection = (sortKey === 'amount' || sortKey === 'date') ? 'desc' : 'asc';
+                        }
+                        renderDashboard();
+                    }
+                });
+            });
+        }
+
+        function populateFilters() {
+            const industries = [...new Set(companyData.map(c => c.industry))].sort();
+            const rounds = [...new Set(companyData.map(c => c.round))].sort();
+            const months = [...new Set(companyData.map(c => new Date(c.date).toLocaleString('default', { month: 'long' })))].sort((a,b) => new Date(`1 ${a} 2025`) - new Date(`1 ${b} 2025`));
+
+            const industryFilter = document.getElementById('industryFilter');
+            industries.forEach(ind => industryFilter.add(new Option(ind, ind)));
+
+            const roundFilter = document.getElementById('roundFilter');
+            rounds.forEach(r => roundFilter.add(new Option(r, r)));
+            
+            const monthFilter = document.getElementById('monthFilter');
+            months.forEach(m => monthFilter.add(new Option(m, m)));
+        }
+
+        function renderDashboard() {
+            const filteredData = getFilteredAndSortedData();
+            updateStats(filteredData);
+            renderCharts(filteredData);
+            renderTable(filteredData);
+            renderPagination(filteredData.length);
+        }
+
+        function getFilteredAndSortedData() {
+            let data = companyData.filter(company => {
+                const matchesSearch = activeFilters.search === '' || 
+                    Object.values(company).some(val => String(val).toLowerCase().includes(activeFilters.search));
+                const matchesIndustry = activeFilters.industry === '' || company.industry === activeFilters.industry;
+                const matchesRound = activeFilters.round === '' || company.round === activeFilters.round;
+                const matchesMonth = activeFilters.month === '' || new Date(company.date).toLocaleString('default', { month: 'long' }) === activeFilters.month;
+                return matchesSearch && matchesIndustry && matchesRound && matchesMonth;
+            });
+
+            data.sort((a, b) => {
+                let valA = a[currentSortColumn];
+                let valB = b[currentSortColumn];
+
+                if (currentSortColumn === 'date') {
+                    valA = new Date(valA);
+                    valB = new Date(valB);
+                }
+                
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
+
+                if (valA < valB) return currentSortDirection === 'asc' ? -1 : 1;
+                if (valA > valB) return currentSortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            return data;
+        }
+
+        function updateStats(data) {
+            document.getElementById('totalCompanies').textContent = data.length;
+            const totalFunding = data.reduce((sum, c) => sum + (c.amount || 0), 0);
+            document.getElementById('totalFunding').textContent = `$${totalFunding.toFixed(1)}M`;
+            document.getElementById('avgFunding').textContent = data.length > 0 ? `$${(totalFunding / data.length).toFixed(1)}M` : '$0M';
+            document.getElementById('uniqueIndustries').textContent = [...new Set(data.map(c => c.industry))].length;
+        }
+
+        function renderCharts(data) {
+            const industryCounts = data.reduce((acc, c) => {
+                acc[c.industry] = (acc[c.industry] || 0) + c.amount;
+                return acc;
+            }, {});
+            const sortedIndustries = Object.entries(industryCounts).sort(([,a],[,b]) => b-a).slice(0, 7);
+
+            const roundCounts = data.reduce((acc, c) => {
+                acc[c.round] = (acc[c.round] || 0) + 1;
+                return acc;
+            }, {});
+            const sortedRounds = Object.entries(roundCounts).sort(([,a],[,b]) => b-a).slice(0,7);
+
+            const chartColors = ['#7f00ff', '#e100ff', '#00c3ff', '#ff6f91', '#ff9671', '#ffc75f', '#a18cd1'];
+
+            if (industryChartInstance) industryChartInstance.destroy();
+            industryChartInstance = new Chart(document.getElementById('industryChart'), {
+                type: 'pie',
+                data: {
+                    labels: sortedIndustries.map(item => item[0]),
+                    datasets: [{
+                        label: 'Funding by Industry ($M)',
+                        data: sortedIndustries.map(item => item[1]),
+                        backgroundColor: chartColors,
+                        borderColor: '#1a1a2e',
+                        borderWidth: 2
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { 
+                            position: 'bottom', 
+                            labels: { 
+                                color: '#fff',
+                                padding: 15,
+                                usePointStyle: true,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#16213e',
+                            titleColor: '#00c3ff',
+                            bodyColor: '#ffffff',
+                            borderColor: '#7f00ff',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                    return `${context.label}: $${context.parsed.toFixed(1)}M (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const industry = sortedIndustries[index][0];
+                            
+                            // Toggle filter - if already selected, clear it
+                            if (activeFilters.industry === industry) {
+                                activeFilters.industry = '';
+                                document.getElementById('industryFilter').value = '';
+                            } else {
+                                activeFilters.industry = industry;
+                                document.getElementById('industryFilter').value = industry;
+                            }
+                            
+                            currentPage = 1;
+                            renderDashboard();
+                            updateActiveFiltersDisplay();
+                        }
+                    },
+                    onHover: (e, elements) => {
+                        e.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                    }
+                }
+            });
+
+            if (roundChartInstance) roundChartInstance.destroy();
+            roundChartInstance = new Chart(document.getElementById('roundChart'), {
+                type: 'bar',
+                data: {
+                    labels: sortedRounds.map(item => item[0]),
+                    datasets: [{
+                        label: 'Number of Deals by Round',
+                        data: sortedRounds.map(item => item[1]),
+                        backgroundColor: chartColors,
+                        borderColor: chartColors,
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#16213e',
+                            titleColor: '#00c3ff',
+                            bodyColor: '#ffffff',
+                            borderColor: '#7f00ff',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.parsed.y} deals`;
+                                }
+                            }
+                        }
+                    }, 
+                    scales: { 
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: {
+                                color: '#fff',
+                                font: {
+                                    size: 11
+                                }
+                            }, 
+                            grid: {
+                                color: '#2c2c54',
+                                lineWidth: 1
+                            },
+                            border: {
+                                color: '#7f00ff'
+                            }
+                        }, 
+                        x: { 
+                            ticks: {
+                                color: '#fff',
+                                font: {
+                                    size: 11
+                                },
+                                maxRotation: 45
+                            }, 
+                            grid: {
+                                color: '#2c2c54',
+                                lineWidth: 1
+                            },
+                            border: {
+                                color: '#7f00ff'
+                            }
+                        }
+                    },
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const round = sortedRounds[index][0];
+                            
+                            // Toggle filter - if already selected, clear it
+                            if (activeFilters.round === round) {
+                                activeFilters.round = '';
+                                document.getElementById('roundFilter').value = '';
+                            } else {
+                                activeFilters.round = round;
+                                document.getElementById('roundFilter').value = round;
+                            }
+                            
+                            currentPage = 1;
+                            renderDashboard();
+                            updateActiveFiltersDisplay();
+                        }
+                    },
+                    onHover: (e, elements) => {
+                        e.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                    }
+                }
+            });
+        }
+
+        function updateActiveFiltersDisplay() {
+            const container = document.getElementById('activeFilters');
+            container.innerHTML = '';
+            
+            const filters = [];
+            if (activeFilters.industry) filters.push({type: 'Industry', value: activeFilters.industry});
+            if (activeFilters.round) filters.push({type: 'Round', value: activeFilters.round});
+            if (activeFilters.month) filters.push({type: 'Month', value: activeFilters.month});
+            if (activeFilters.search) filters.push({type: 'Search', value: activeFilters.search});
+            
+            if (filters.length > 0) {
+                const title = document.createElement('span');
+                title.className = 'filter-title';
+                title.textContent = 'Active Filters:';
+                container.appendChild(title);
+                
+                filters.forEach(filter => {
+                    const filterElement = document.createElement('span');
+                    filterElement.className = 'active-filter';
+                    filterElement.innerHTML = `${filter.type}: ${filter.value} <span class="remove" onclick="removeFilter('${filter.type.toLowerCase()}')">×</span>`;
+                    container.appendChild(filterElement);
+                });
+            }
+        }
+
+        function removeFilter(type) {
+            switch(type) {
+                case 'industry':
+                    activeFilters.industry = '';
+                    document.getElementById('industryFilter').value = '';
+                    break;
+                case 'round':
+                    activeFilters.round = '';
+                    document.getElementById('roundFilter').value = '';
+                    break;
+                case 'month':
+                    activeFilters.month = '';
+                    document.getElementById('monthFilter').value = '';
+                    break;
+                case 'search':
+                    activeFilters.search = '';
+                    document.getElementById('searchInput').value = '';
+                    break;
+            }
+            currentPage = 1;
+            renderDashboard();
+            updateActiveFiltersDisplay();
+        }
+
+        function renderTable(data) {
+            const tbody = document.querySelector('#companiesTable tbody');
+            tbody.innerHTML = '';
+            
+            const startIndex = (currentPage - 1) * rowsPerPage;
+            const endIndex = startIndex + rowsPerPage;
+            const pageData = data.slice(startIndex, endIndex);
+            
+            pageData.forEach(company => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${company.name}</strong></td>
+                    <td><strong>$${company.amount}M</strong></td>
+                    <td><span style="background-color: rgba(127, 0, 255, 0.2); padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.85rem;">${company.industry}</span></td>
+                    <td><span style="background-color: rgba(0, 195, 255, 0.2); padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.85rem;">${company.round}</span></td>
+                    <td>${new Date(company.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                    <td>${company.founders}</td>
+                    <td>${company.vcs}</td>
+                    <td class="news-link"><a href="${company.source}" target="_blank" rel="noopener noreferrer">View Article</a></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function renderPagination(totalItems) {
+            const totalPages = Math.ceil(totalItems / rowsPerPage);
+            const paginationContainer = document.getElementById('paginationControls');
+            paginationContainer.innerHTML = '';
+            
+            if (totalPages <= 1) return;
+            
+            // Previous button
+            const prevButton = document.createElement('button');
+            prevButton.textContent = '‹ Previous';
+            prevButton.disabled = currentPage === 1;
+            prevButton.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderDashboard();
+                }
+            });
+            paginationContainer.appendChild(prevButton);
+            
+            // Page numbers
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, currentPage + 2);
+            
+            if (startPage > 1) {
+                const firstButton = document.createElement('button');
+                firstButton.textContent = '1';
+                firstButton.addEventListener('click', () => {
+                    currentPage = 1;
+                    renderDashboard();
+                });
+                paginationContainer.appendChild(firstButton);
+                
+                if (startPage > 2) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.style.padding = '0.5rem';
+                    ellipsis.style.color = 'var(--text-secondary)';
+                    paginationContainer.appendChild(ellipsis);
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageButton = document.createElement('button');
+                pageButton.textContent = i;
+                pageButton.className = i === currentPage ? 'active' : '';
+                pageButton.addEventListener('click', () => {
+                    currentPage = i;
+                    renderDashboard();
+                });
+                paginationContainer.appendChild(pageButton);
+            }
+            
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.style.padding = '0.5rem';
+                    ellipsis.style.color = 'var(--text-secondary)';
+                    paginationContainer.appendChild(ellipsis);
+                }
+                
+                const lastButton = document.createElement('button');
+                lastButton.textContent = totalPages;
+                lastButton.addEventListener('click', () => {
+                    currentPage = totalPages;
+                    renderDashboard();
+                });
+                paginationContainer.appendChild(lastButton);
+            }
+            
+            // Next button
+            const nextButton = document.createElement('button');
+            nextButton.textContent = 'Next ›';
+            nextButton.disabled = currentPage === totalPages;
+            nextButton.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderDashboard();
+                }
+            });
+            paginationContainer.appendChild(nextButton);
+        }
+    </script>
+</body>
+</html>
+
